@@ -60,8 +60,8 @@ def home():
 
 @app.route('/predict', methods=['POST'])
 def predict():
-  text=[]
-  text=request.form["text"]
+  data=request.get_json() ## get the JSON data from the request
+  text=data['prediction']
   text=loaded_vectorizer.transform([text])
   predict=loaded_svm.predict(text)
   if(predict[0]==0):
@@ -72,8 +72,8 @@ def predict():
 
   # return render_template('predict.html', prediction=predict) ## render the predict template with the prediction result
   #this works
-  return jsonify(predict) ## return the prediction as a string
-
+  # return jsonify(predict) ## return the prediction as a string
+  return jsonify({'result':predict})
 
 
 
