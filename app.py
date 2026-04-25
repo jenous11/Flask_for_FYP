@@ -1,7 +1,7 @@
 """
 ================================================
  CYBERBULLYING DETECTION — FLASK API
- (6-Class Multiclass Classification)
+ (6-Class Multiclass | Multilingual mBERT)
 ================================================
  Labels:
    0 → Not Cyberbullying
@@ -10,6 +10,9 @@
    3 → Other Cyberbullying
    4 → Age
    5 → Ethnicity
+
+ Languages Supported:
+   English | Nepali Devanagari | Romanized Nepali | Mixed
 
  Endpoints:
    GET  /              → API info
@@ -21,7 +24,7 @@
 
  Test:
    POST http://127.0.0.1:5000/predict
-   Body: {"text": "you are so stupid!"}
+   Body: {"text": "tah muji ho"}
 ================================================
 """
 
@@ -29,25 +32,34 @@ import pickle
 import torch
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from transformers import DistilBertTokenizer, DistilBertForSequenceClassification
+from transformers import AutoTokenizer, AutoModelForSequenceClassification  # ← changed from DistilBert* to Auto*
 
 app = Flask(__name__)
 CORS(app)  # Allow Laravel to call Flask
 
-SAVE_DIR = 'saved_model'
+SAVE_DIR = 'cyberguard_mbert_best'  # ← changed from 'saved_model'
 MAX_LEN  = 128
 
 # ── Load model on startup ──────────────────────
 print("Loading model, please wait...")
 
-tokenizer = DistilBertTokenizer.from_pretrained(SAVE_DIR)
-model     = DistilBertForSequenceClassification.from_pretrained(SAVE_DIR)
+tokenizer = AutoTokenizer.from_pretrained(SAVE_DIR)                         # ← changed
+model     = AutoModelForSequenceClassification.from_pretrained(SAVE_DIR)    # ← changed
 model.eval()
 
-with open(f'{SAVE_DIR}/label_info.pkl', 'rb') as f:
-    label_info = pickle.load(f)
-
-ID2LABEL = label_info['id2label']
+try:
+    with open(f'{SAVE_DIR}/label_info.pkl', 'rb') as f:
+        label_info = pickle.load(f)
+    ID2LABEL = label_info['id2label']
+except FileNotFoundError:
+    ID2LABEL = {
+        0: 'Not Cyberbullying',
+        1: 'Gender',
+        2: 'Religion',
+        3: 'Other Cyberbullying',
+        4: 'Age',
+        5: 'Ethnicity',
+    }
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model  = model.to(device)
@@ -93,7 +105,7 @@ def predict_text(text: str):
     return {
         'label'      : label,
         'label_id'   : pred_idx,
-        'confidence' : round(confidence * 100, 2),  # ← float, NOT string
+        'confidence' : round(confidence * 100, 2),
         'is_bullying': pred_idx != 0,
         'color'      : LABEL_COLORS.get(label, 'gray'),
         'all_probs'  : all_probs
@@ -106,9 +118,10 @@ def predict_text(text: str):
 @app.route('/', methods=['GET'])
 def home():
     return jsonify({
-        "api"    : "Cyberbullying Detection API",
-        "model"  : "DistilBERT 6-Class Classifier",
-        "labels" : ID2LABEL,
+        "api"      : "CyberGuard Multilingual Detection API",
+        "model"    : "distilbert-base-multilingual-cased (mBERT)",
+        "languages": ["English", "Nepali Devanagari", "Romanized Nepali", "Mixed"],
+        "labels"   : ID2LABEL,
         "endpoints": {
             "GET  /"              : "API info",
             "POST /predict"       : "Predict single text",
@@ -140,7 +153,7 @@ def predict_single():
         "text"       : text,
         "label"      : result['label'],
         "label_id"   : result['label_id'],
-        "confidence" : result['confidence'],   # ← float now, no % sign
+        "confidence" : result['confidence'],
         "is_bullying": result['is_bullying'],
         "color"      : result['color'],
         "all_probs"  : result['all_probs']
